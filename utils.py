@@ -6,6 +6,14 @@ import config as config
 from dcase_util.containers import metadata
 import torch
 import torch.nn as nn
+import datetime
+
+def get_time():
+    current_time = datetime.datetime.now()
+    current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+    digits_only = ''.join([char for char in current_time_str if char.isdigit()])
+    return digits_only
+
 
 eps = np.finfo(np.float).eps
 
@@ -121,3 +129,11 @@ def move_data_to_device(x, device):
         return x
 
     return x.to(device)
+
+#############################
+
+mel_basis = librosa.filters.mel(sr=config.sample_rate, n_fft=config.n_fft, n_mels=config.n_mel, fmin=50, fmax=14000)
+
+def extract_mbe(_y):
+     spec, _ = librosa.core.spectrum._spectrogram(y=_y, n_fft=config.n_fft, hop_length=config.hop_size, power=1)
+     return np.dot(mel_basis, spec)
