@@ -6,13 +6,15 @@ from evaluate import *
 from utils import split_in_seqs, create_folder
 from wavdataset import WavDataset
 from model import *
+import glob
 
-def prediction():
+def prediction(output_model):
      device = 'cuda' if (torch.cuda.is_available()) else 'cpu'
      SCORE = {}
      
-     f_meta = open("Outdir/meta.tsv", "w+", encoding="utf-8")
-     f_embedding = open("Outdir/embedding.tsv", "w+", encoding="utf-8")
+     f_meta = open(output_model + "/meta.tsv", "w+", encoding="utf-8")
+     f_meta_all = open(output_model + "/meta_all.tsv", "w+", encoding="utf-8")
+     f_embedding = open(output_model + "/embedding.tsv", "w+", encoding="utf-8")
      
      Tensor_Projector = [0]*11
      
@@ -22,20 +24,20 @@ def prediction():
           # Load features and labels
           test_fold = "metadata/development_folds/fold" + str(fold) + "_test.csv"
           
-          test_dataset = WavDataset(test_fold)
+          test_dataset = WavDataset(test_fold, test=True)
           
           # Data loader
           test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
           
-          if config.mel_input:
+          if config.model == "CRNN" or config.model == "CRNN_Chunk":
                model = CRNN()
           else:
                model = Wav2VecClassifier()
                
           
           
-          # model.load_state_dict(torch.load("/home/nhandt23/Desktop/DCASE/Wav2Vec/Outdir/best_fold5.bin", map_location=device))
-          model.load_state_dict(torch.load("/home/nhandt23/Desktop/DCASE/Wav2Vec/Outdir/best_fold"+str(fold)+".bin", map_location=device))
+          # model.load_state_dict(torch.load(output_model + "/best_fold5.bin", map_location=device))
+          model.load_state_dict(torch.load(output_model + "/best_fold"+str(fold)+".bin", map_location=device))
           
           model.eval()
           with torch.no_grad():
@@ -43,6 +45,14 @@ def prediction():
                     prediction, embedding = model(datas)
                     
                     label = torch.argmax(target[0], dim=0)
+                    
+                    
+                    
+                    
+                    
+                    
+                    f_meta_all.write(str(list(config.class_labels_hard.keys())[int(label)]) + "\n")
+                    
                     if Tensor_Projector[int(label)] < 700:
                          Tensor_Projector[int(label)] = Tensor_Projector[int(label)] + 1
                          
@@ -51,6 +61,9 @@ def prediction():
                          emb = embedding[0]
                          f_embedding.write("\t".join([str(s) for s in emb.tolist()]) + "\n")
                     
+                    
+                    
+                    
                     # prediction = torch.nn.functional.softmax(prediction, dim=1)
                     
                     file, on = files[0].split("/")[-1].replace(".wav","").rsplit("_",1)
@@ -58,9 +71,10 @@ def prediction():
                     if file not in SCORE:
                          SCORE[file] = {}
                     SCORE[file][int(float(on))] = prediction[0]
-     
+                    
+     create_folder(output_model+"/dev_txt_scores")
      for file, timestamp in tqdm.tqdm(SCORE.items()):
-          fw = open("dev_txt_scores/" + file + ".tsv", "w+", encoding="utf-8")
+          fw = open(output_model+"/dev_txt_scores/" + file + ".tsv", "w+", encoding="utf-8")
           fw.write("onset\toffset\t" + "\t".join( list(config.class_labels_hard.keys()) )  + "\n")
           timestamp = dict(sorted(timestamp.items()))
           for on, prediction in timestamp.items():
@@ -70,23 +84,25 @@ def prediction():
           
      return 0
 
-def test():
-
-     output_folder = 'dev_txt_scores'
-     create_folder(output_folder)
-
-     output_folder_soft = 'dev_txt_scores_soft'
-     create_folder(output_folder_soft)
+def test(output_model):
      
      path_groundtruth = 'metadata/gt_dev.csv'
      # Calculate threshold independent metrics
-     get_threshold_independent(path_groundtruth, output_folder)
+     get_threshold_independent(path_groundtruth, output_model + '/dev_txt_scores')
      
      # get_threshold_independent(path_groundtruth, output_folder_soft)
 
 
 # python train_soft.py 
 if __name__ == '__main__':
-     # prediction()
-     test()
+     
+     
+     output_model = sorted(glob.glob('Outdir/*'))[-1]
+     
+     
+     print(output_model)
+     
+     # output_model = 'Outdir/20230420141731'
+     prediction(output_model)
+     test(output_model)
      # get_threshold_independent('metadata/gt_dev.csv', "/home/nhandt23/Desktop/DCASE/Wav2Vec/metadata/dev_txt_scores_gt")

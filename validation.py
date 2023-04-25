@@ -16,11 +16,7 @@ def prediction():
           time_resolution=1.0
      )
      
-     output_folder = 'dev_txt_scores'
-     create_folder(output_folder)
-     files = glob.glob(output_folder + '/*')
-     for f in files:
-          os.remove(f)
+     output_model = sorted(glob.glob('Outdir/*'))[-1]
      
      for fold in config.holdout_fold:
           print("Fold: ", fold)
@@ -28,18 +24,18 @@ def prediction():
           # Load features and labels
           test_fold = "metadata/development_folds/fold" + str(fold) + "_test.csv"
           
-          test_dataset = WavDataset(test_fold)
+          test_dataset = WavDataset(test_fold, test=True)
           
           # Data loader
           test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
           
-          if config.mel_input:
+          if config.model == "CRNN" or config.model == "CRNN_Chunk":
                model = CRNN()
           else:
                model = Wav2VecClassifier()
           
           # model.load_state_dict(torch.load("/home/nhandt23/Desktop/DCASE/Wav2Vec/Outdir/best_fold5.bin", map_location=device))
-          model.load_state_dict(torch.load("/home/nhandt23/Desktop/DCASE/Wav2Vec/Outdir/best_fold"+str(fold)+".bin", map_location=device))
+          model.load_state_dict(torch.load(output_model + "/best_fold"+str(fold)+".bin", map_location=device))
           
           model.eval()
           nbatch = 0
