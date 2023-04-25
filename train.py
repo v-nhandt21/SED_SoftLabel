@@ -5,20 +5,24 @@ import torch.optim as optim
 import torch.utils.data
 from evaluate import *
 from model import *
-from utils import split_in_seqs, create_folder, move_data_to_device
+from utils import *
 import config, json
 import sed_eval, tqdm
 from wavdataset import WavDataset
 from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
 from pytorch_balanced_sampler.sampler import SamplerFactory
+import shutil
+import warnings
+warnings.filterwarnings("ignore")
 
 def train():
      device = 'cuda' if (torch.cuda.is_available()) else 'cpu'
 
      # Create output folders
-     output_model = 'Outdir'
+     output_model = 'Outdir/' + get_time()
      create_folder(output_model)
+     shutil.copy('config.py', output_model)
 
      output_folder = 'dev_txt_scores'
      create_folder(output_folder)
@@ -41,8 +45,8 @@ def train():
           train_fold = "metadata/development_folds/fold" + str(fold) + "_train.csv"
           val_fold = "metadata/development_folds/fold" + str(fold) + "_val.csv"
           
-          train_dataset = WavDataset(train_fold)
-          validate_dataset = WavDataset(val_fold)
+          train_dataset = WavDataset(train_fold, test=False)
+          validate_dataset = WavDataset(val_fold, test=True)
           
           class_idxs = train_dataset.get_class_idxs()
 
@@ -55,8 +59,8 @@ def train():
           )
 
           # Data loader
-          train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=config.batch_size, shuffle=True,
-                                                       num_workers=8, pin_memory=True, drop_last=True)
+          train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_sampler=batch_sampler,
+                                                       num_workers=8, pin_memory=True)
 
           validate_loader = torch.utils.data.DataLoader(dataset=validate_dataset, batch_size=1, shuffle=True,
                                                        num_workers=8, pin_memory=True)
@@ -64,20 +68,20 @@ def train():
           
 
           # Prepare model
-          if config.mel_input:
-               model = CRNN()
-          else:
-               model = Wav2VecClassifier()
+          if config.model == "CRNN":
+               model = CRNN().to(device)
+               summary(model, (200, 64))
+          elif config.model == "Wav2VecClassifier":
+               model = Wav2VecClassifier().to(device)
+          elif config.model == "CRNN_Chunk":
+               model = CRNN_Chunk().to(device)
+               summary(model, (200, 64))
+
                
           if LogWanDB:
                wandb.watch(model)
                
           criterion = torch.nn.MSELoss(reduction='mean')
-          
-          if 'cuda' in device:
-               model.to(device)
-          
-          summary(model, (200, 64))
                
           print('\nCreate model:')
 
@@ -103,8 +107,13 @@ def train():
                     iter += 1
                     # Zero gradients for every batch
                     optimizer.zero_grad()
+                    
+                    # print(batch_data.shape)
 
                     batch_output, embeddings = model(move_data_to_device(batch_data, device))
+                    
+                    # print(batch_output.shape)
+                    # print("====", batch_target.shape)
 
                     # Calculate loss
                     loss = criterion(batch_output, batch_target.to(device))
