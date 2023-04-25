@@ -9,9 +9,7 @@ import config, os, torchaudio
 from pathlib import Path
 from utils import split_in_seqs, create_folder, mel_basis, extract_mbe
 from augmentation import get_augment_wav, get_augment_mel
-from preprocess import STFT
-
-
+from preprocess import mel_spectrogram
 
 class WavDataset(torch.utils.data.Dataset):
      def __init__(self, file_folder, test):
@@ -30,13 +28,6 @@ class WavDataset(torch.utils.data.Dataset):
           self.specaugment = get_augment_mel()
           self.wavaugment = get_augment_wav
           self.test = test
-          self.stft_obj = STFT(filter_length=config.n_fft, \
-                hop_length=config.hop_size, win_length=config.n_fft, \
-                n_mel_channels=config.n_mel, \
-                sampling_rate=config.sample_rate, \
-                mel_fmin=50, \
-                mel_fmax=14000, \
-                window='hann')
           
                     
      def __len__(self):
@@ -62,7 +53,7 @@ class WavDataset(torch.utils.data.Dataset):
           else:
                audio = audio 
 
-          feature_input = self.stft_obj.mel_spectrogram_torchstft(audio)[0]
+          feature_input = mel_spectrogram(audio)[0]
           
           if config.specaugment and not self.test:
                feature_input = self.specaugment(feature_input)
@@ -74,36 +65,32 @@ class WavDataset(torch.utils.data.Dataset):
      def get_mel_chunk(self, idx):
           audio_file = self.audios[idx]
           label_file = self.labels[idx]
-
           
-          label = np.load(label_file)
-          label = torch.from_numpy(label).type(torch.FloatTensor)
+          onsite = int(float(audio_file.split("_")[-1].split(".")[0]))
           
-          audio, _ = torchaudio.load(audio_file) # sr should be 16k
+          audio = None
+          label = None
+          for i_chunk in range(onsite-int(config.chunk_size/2), onsite+int(config.chunk_size/2) + 1):
+               audio_file_cur = audio_file.replace(str(onsite)+".wav", str(i_chunk) + ".wav")
+               label_file_cur = label_file.replace(str(onsite)+".npy", str(i_chunk) + ".npy")
+               if Path(audio_file_cur).is_file() == True: 
+                    audio_cur = torchaudio.load(audio_file_cur)[0]
           
-          onsite = audio_file.split("_")[-1].split(".")[0]
-          
-          pre_file = audio_file.replace(onsite+".wav", str(float(onsite)-1) + ".wav")
-          pre_file2 = audio_file.replace(onsite+".wav", str(float(onsite)-2) + ".wav")
-          pos_file = audio_file.replace(onsite+".wav", str(float(onsite)+1) + ".wav")
-          pos_file2 = audio_file.replace(onsite+".wav", str(float(onsite)+2) + ".wav")
-          
-          if Path(pre_file).is_file() == True: 
-               audio = torch.cat( (torchaudio.load(pre_file)[0],audio), dim=1)
-          else:
-               audio = torch.cat( (audio,audio), dim=1)
-          if Path(pre_file2).is_file() == True: 
-               audio = torch.cat( (torchaudio.load(pre_file2)[0],audio), dim=1)
-          else:
-               audio = torch.cat( (audio,audio), dim=1)
-          if Path(pos_file).is_file() == True: 
-               audio = torch.cat( (audio, torchaudio.load(pos_file)[0]), dim=1)
-          else:
-               audio = torch.cat( (audio,audio), dim=1)
-          if Path(pos_file2).is_file() == True: 
-               audio = torch.cat( (audio, torchaudio.load(pos_file2)[0]), dim=1)
-          else:
-               audio = torch.cat( (audio,audio), dim=1)
+                    label_cur = np.load(label_file_cur)
+                    label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
+                    
+               else:
+                    audio_cur = torchaudio.load(audio_file)[0]
+                    
+                    label_cur = np.load(label_file)
+                    label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
+                    
+               if audio == None:
+                    audio = audio_cur
+                    label = label_cur
+               else:
+                    audio = torch.cat( (audio,audio_cur), dim=1)
+                    label = torch.cat( (label,label_cur), dim=0)
           
           if config.wavaugment and not self.test:
                audio = self.wavaugment(audio)
@@ -114,13 +101,10 @@ class WavDataset(torch.utils.data.Dataset):
           else:
                audio = audio 
 
-          feature_input = self.stft_obj.mel_spectrogram_torchstft(audio)[0]
+          feature_input = mel_spectrogram(audio)[0]
           
           if config.specaugment and not self.test:
                feature_input = self.specaugment(feature_input)
-          
-          seg = int(feature_input.size(1)/5)
-          feature_input = feature_input[:,2*seg:3*seg]     
           # print(feature_input.shape)          
           return feature_input.T, label, audio_file
      
@@ -173,19 +157,21 @@ if __name__ == "__main__":
 
 
      #############################
-     ds = WavDataset("/home/nhandt23/Desktop/DCASE/DCASE_Sound_Event_Detection_Soft_Labels/development_folds/fold1_train.csv")
+     ds = WavDataset("/home/nhandt23/Desktop/DCASE/DCASE_Sound_Event_Detection_Soft_Labels/development_folds/fold1_train.csv", test=False)
      
-     ids = ds.get_class_idxs()
-     tt = 0
-     for i in ids:
-          print(len(i))
-          tt += len(i)
-     print(tt)
-     # dl = DataLoader(dataset=ds, batch_size=8, shuffle=True,
-     #                                                   num_workers=1, pin_memory=True, drop_last=True)
-     # for batch in dl:
-     #      audio, label, audio_file = batch 
-     #      print(audio.shape)
+     # ids = ds.get_class_idxs()
+     # tt = 0
+     # for i in ids:
+     #      print(len(i))
+     #      tt += len(i)
+     # print(tt)
+     
+     dl = DataLoader(dataset=ds, batch_size=8, shuffle=True, num_workers=1, pin_memory=True, drop_last=True)
+     for batch in dl:
+          audio, label, audio_file = batch 
+          print(audio.shape)
+          print(label.shape)
+          break
      # processor = Wav2Vec2Processor.from_pretrained('facebook/wav2vec2-base-960h')
      # for audio, label, filename in dl:
      #      print(len(audio[0]), len(audio[1]))

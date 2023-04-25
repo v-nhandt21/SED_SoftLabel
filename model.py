@@ -161,7 +161,7 @@ class CRNN_Chunk(nn.Module):
           # Bidirectional layer
           recurrent, _ = self.gru1(x)
           x = self.linear1(recurrent)
-          x = torch.mean(x, dim=1)
+          # x = torch.mean(x, dim=1)
           embedding = x.squeeze(dim=1)          
           x = self.linear2(embedding)
           
