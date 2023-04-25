@@ -1,24 +1,31 @@
 import numpy as np
 
-mel_input=True
-sample_rate=16000
-hop_size=128
-n_fft=2048
-n_mel=64
-
-data_dir = "/home/nhandt23/Desktop/DCASE/DATA/Raw/"
+##### Model
+model = "CRNN"
 n_classes = 11
-freeze_encoder = False
+freeze_encoder = True
+use_sigmoid=False 
 
-learning_rate=0.0005
+##### Training strategy
+learning_rate=0.001
 batch_size=128
-stop_iteration = 20
+stop_iteration = 150
 patience = int(0.9*stop_iteration)
 log_iteration=500
-
 holdout_fold=np.arange(1, 6)
 
-balance_alpha=0.5
+##### Data Augment
+data_dir = "/home/nhandt23/Desktop/DCASE/DATA/Raw/"
+balance_alpha=0
+wavaugment=False
+specaugment=False
+
+sample_rate=16000
+hop_size=3200
+n_fft=6400
+n_mel=64
+
+#################################### 
 # For the hard labels we have 11 classes
 labels_hard = ['birds_singing', 'car', 'people talking', 'footsteps', 'children voices', 'wind_blowing',
           'brakes_squeaking', 'large_vehicle', 'cutlery and dishes', 'metro approaching', 'metro leaving']
@@ -35,5 +42,4 @@ class_labels_hard = {
      'metro approaching': 9,
      'metro leaving': 10,
 }
-
 posterior_thresh = 0.5
