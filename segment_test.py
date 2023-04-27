@@ -45,6 +45,20 @@ def prediction(output_model):
                     
                     prediction = prediction[:,int(config.chunk_size/2)*frame_sec:(int(config.chunk_size/2)+1)*frame_sec,:]
                     
+                    labels = torch.argmax(target[0], dim=1)
+                    for idx, label in enumerate(labels):
+                         f_meta_all.write(str(list(config.class_labels_hard.keys())[int(label)]) + "\n")
+                         
+                         if Tensor_Projector[int(label)] < 700:
+                              Tensor_Projector[int(label)] = Tensor_Projector[int(label)] + 1
+                              
+                              label = list(config.class_labels_hard.keys())[int(label)]
+                              f_meta.write(str(label) + "\n")
+                              emb = embedding[0][idx]
+                              f_embedding.write("\t".join([str(s) for s in emb.tolist()]) + "\n")
+                    
+                    prediction = torch.nn.functional.softmax(prediction, dim=2)
+                    
                     file, on = files[0].split("/")[-1].replace(".wav","").rsplit("_",1)
                     
                     if file not in SCORE:
@@ -79,8 +93,8 @@ if __name__ == '__main__':
      
      output_model = sorted(glob.glob('Outdir/*'))[-1]
      
-     
-     print(output_model)
+     # output_model = '/home/nhandt23/Desktop/DCASE/Wav2Vec/Outdir/20230425222528'
+     # print(output_model)
      
      # output_model = 'Outdir/20230420141731'
      prediction(output_model)

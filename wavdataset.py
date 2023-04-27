@@ -10,7 +10,7 @@ from pathlib import Path
 from utils import split_in_seqs, create_folder, mel_basis, extract_mbe
 from augmentation import get_augment_wav, get_augment_mel
 from preprocess import mel_spectrogram
-
+import shutil
 class WavDataset(torch.utils.data.Dataset):
      def __init__(self, file_folder, test):
           f = open(file_folder, "r", encoding="utf-8")
@@ -29,6 +29,10 @@ class WavDataset(torch.utils.data.Dataset):
           self.wavaugment = get_augment_wav
           self.test = test
           
+          shutil.rmtree("CACHE_AUDIO")
+          shutil.rmtree("CACHE_LABEL")
+          Path("CACHE_AUDIO").mkdir(parents=True, exist_ok=True)
+          Path("CACHE_LABEL").mkdir(parents=True, exist_ok=True)
                     
      def __len__(self):
           return len(self.audios)
@@ -66,38 +70,49 @@ class WavDataset(torch.utils.data.Dataset):
           audio_file = self.audios[idx]
           label_file = self.labels[idx]
           
+          file_id = audio_file.split("/")[-1].split(".")[0]
+          
           onsite = int(float(audio_file.split("_")[-1].split(".")[0]))
           
           audio = None
           label = None
-          for i_chunk in range(onsite-int(config.chunk_size/2), onsite+int(config.chunk_size/2) + 1):
-               audio_file_cur = audio_file.replace(str(onsite)+".wav", str(i_chunk) + ".wav")
-               label_file_cur = label_file.replace(str(onsite)+".npy", str(i_chunk) + ".npy")
-               if Path(audio_file_cur).is_file() == True: 
-                    audio_cur = torchaudio.load(audio_file_cur)[0]
           
-                    label_cur = np.load(label_file_cur)
-                    label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
-                    
-               else:
-                    audio_cur = torchaudio.load(audio_file)[0]
-                    
-                    label_cur = np.load(label_file)
-                    label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
-                    
-               if audio == None:
-                    audio = audio_cur
-                    label = label_cur
-               else:
-                    audio = torch.cat( (audio,audio_cur), dim=1)
-                    label = torch.cat( (label,label_cur), dim=0)
+          if Path("CACHE_AUDIO/"+file_id+".wav").is_file() == True:
+               audio = torchaudio.load("CACHE_AUDIO/"+file_id+".wav")[0]
+               label = torch.load("CACHE_LABEL/"+file_id+".pt")
+               
+          else:
+               for i_chunk in range(onsite-int(config.chunk_size/2), onsite+int(config.chunk_size/2) + 1):
+                    audio_file_cur = audio_file.replace(str(onsite)+".wav", str(i_chunk) + ".wav")
+                    label_file_cur = label_file.replace(str(onsite)+".npy", str(i_chunk) + ".npy")
+                    if Path(audio_file_cur).is_file() == True: 
+                         audio_cur = torchaudio.load(audio_file_cur)[0]
+               
+                         label_cur = np.load(label_file_cur)
+                         label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
+                         
+                    else:
+                         audio_cur = torchaudio.load(audio_file)[0]
+                         
+                         label_cur = np.load(label_file)
+                         label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
+                         
+                    if audio == None:
+                         audio = audio_cur
+                         label = label_cur
+                    else:
+                         audio = torch.cat( (audio,audio_cur), dim=1)
+                         label = torch.cat( (label,label_cur), dim=0)
+                         
+               torchaudio.save("CACHE_AUDIO/"+file_id+".wav", audio, 16000)
+               torch.save(label, "CACHE_LABEL/"+file_id+".pt")
           
           if config.wavaugment and not self.test:
                audio = self.wavaugment(audio)
-               if config.sample_rate <= audio.size(1):
-                    audio = audio[:,:config.sample_rate]
+               if config.sample_rate*config.chunk_size <= audio.size(1):
+                    audio = audio[:,:config.sample_rate*config.chunk_size]
                else:
-                    audio = torch.nn.functional.pad(audio, (0, config.sample_rate - audio.size(1),0,0))
+                    audio = torch.nn.functional.pad(audio, (0, config.sample_rate*config.chunk_size - audio.size(1),0,0))
           else:
                audio = audio 
 
@@ -111,16 +126,43 @@ class WavDataset(torch.utils.data.Dataset):
      def get_wav(self, idx):
           audio_file = self.audios[idx]
           label_file = self.labels[idx]
+          
+          file_id = audio_file.split("/")[-1].split(".")[0]
+          
+          onsite = int(float(audio_file.split("_")[-1].split(".")[0]))
+          
+          audio = None
+          if Path("CACHE_AUDIO/"+file_id+".wav").is_file() == True:
+               audio = torchaudio.load("CACHE_AUDIO/"+file_id+".wav")[0]
                
+          else:
+               for i_chunk in range(onsite-int(config.chunk_size/2), onsite+int(config.chunk_size/2) + 1):
+                    audio_file_cur = audio_file.replace(str(onsite)+".wav", str(i_chunk) + ".wav")
+                    if Path(audio_file_cur).is_file() == True: 
+                         audio_cur = torchaudio.load(audio_file_cur)[0]
+                    else:
+                         audio_cur = torchaudio.load(audio_file)[0]
+                         
+                    if audio == None:
+                         audio = audio_cur
+                    else:
+                         audio = torch.cat( (audio,audio_cur), dim=1)
+                         
+               torchaudio.save("CACHE_AUDIO/"+file_id+".wav", audio, 16000)
+          
+          if config.wavaugment and not self.test:
+               audio = self.wavaugment(audio)
+               if config.sample_rate*config.chunk_size <= audio.size(1):
+                    audio = audio[:,:config.sample_rate*config.chunk_size]
+               else:
+                    audio = torch.nn.functional.pad(audio, (0, config.sample_rate*config.chunk_size - audio.size(1),0,0))
+          else:
+               audio = audio 
+               
+          feature_input = audio.squeeze(0)
+          
           label = np.load(label_file)
           label = torch.from_numpy(label).type(torch.FloatTensor)
-          
-          audio, _ = librosa.load(audio_file, sr = 16000)
-          
-          if config.wavaugment:
-               audio = self.wavaugment(audio)
-               
-          feature_input = audio
 
           return feature_input, label, audio_file
 
