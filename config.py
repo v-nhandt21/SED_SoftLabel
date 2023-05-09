@@ -4,22 +4,22 @@ import numpy as np
 model = "CRNN_Chunk"
 n_classes = 11
 freeze_encoder = True
-use_sigmoid=False 
+use_sigmoid=True
 
 ##### Training strategy
 learning_rate=0.001
-batch_size=128
-stop_iteration = 50
+batch_size=16
+stop_iteration = 30
 patience = int(0.9*stop_iteration)
 log_iteration=500
 holdout_fold=np.arange(1, 6)
-chunk_size=40
+chunk_size=41
 
 ##### Data Augment
 data_dir = "/home/nhandt23/Desktop/DCASE/DATA/Raw/"
-balance_alpha=0
-wavaugment=False
-specaugment=False
+balance_alpha=0.5
+wavaugment=True
+specaugment=True
 
 sample_rate=16000
 hop_size=3200

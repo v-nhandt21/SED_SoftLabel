@@ -121,6 +121,11 @@ def split_in_seqs(data, subdivs):
 
 
 def move_data_to_device(x, device):
+    
+    if isinstance(x, list):
+        xs = [move_data_to_device(i, device) for i in x]
+        return xs
+    
     if 'float' in str(x.dtype):
         x = torch.Tensor(x)
     elif 'int' in str(x.dtype):

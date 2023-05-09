@@ -1,3 +1,5 @@
 Outdir/*
 dev_txt_scores/*
 wandb/*
+CACHE_AUDIO/*
+CACHE_LABEL/*
