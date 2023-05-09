@@ -75,3 +75,41 @@ def mel_spectrogram(y):
      spec = spectral_normalize_torch(spec)
 
      return spec
+
+mel_basis_local = {}
+hann_window_local = {}
+
+def mel_spectrogram_local(y):
+     
+     center=False
+     n_fft=1024
+     num_mels=64
+     sampling_rate=config.sample_rate
+     hop_size=78
+     win_size=1024
+     fmin=0
+     fmax=8000
+     
+     if torch.min(y) < -1.:
+          print('min value is ', torch.min(y))
+     if torch.max(y) > 1.:
+          print('max value is ', torch.max(y))
+
+     global mel_basis_local, hann_window_local
+     if fmax not in mel_basis_local:
+          mel = librosa_mel_fn(sampling_rate, n_fft, num_mels, fmin, fmax)
+          mel_basis_local[str(fmax)+'_'+str(y.device)] = torch.from_numpy(mel).float().to(y.device)
+          hann_window_local[str(y.device)] = torch.hann_window(win_size).to(y.device)
+
+     y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft-hop_size)/2), int((n_fft-hop_size)/2)), mode='reflect')
+     y = y.squeeze(1)
+
+     spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=hann_window_local[str(y.device)],
+                         center=center, pad_mode='reflect', normalized=False, onesided=True)
+
+     spec = torch.sqrt(spec.pow(2).sum(-1)+(1e-9))
+
+     spec = torch.matmul(mel_basis_local[str(fmax)+'_'+str(y.device)], spec)
+     spec = spectral_normalize_torch(spec)
+
+     return spec

@@ -76,6 +76,8 @@ def train():
           elif config.model == "CRNN_Chunk":
                model = CRNN_Chunk().to(device)
                summary(model, (200, 64))
+          elif config.model == "CRNN_GLA":
+               model = CRNN_GLA().to(device)
 
                
           if LogWanDB:

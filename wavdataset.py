@@ -9,7 +9,7 @@ import config, os, torchaudio
 from pathlib import Path
 from utils import split_in_seqs, create_folder, mel_basis, extract_mbe
 from augmentation import get_augment_wav, get_augment_mel
-from preprocess import mel_spectrogram
+from preprocess import mel_spectrogram, mel_spectrogram_local
 import shutil
 class WavDataset(torch.utils.data.Dataset):
      def __init__(self, file_folder, test):
@@ -123,6 +123,65 @@ class WavDataset(torch.utils.data.Dataset):
           # print(feature_input.shape)          
           return feature_input.T, label, audio_file
      
+     def get_mel_gla(self, idx):
+          audio_file = self.audios[idx]
+          label_file = self.labels[idx]
+          
+          file_id = audio_file.split("/")[-1].split(".")[0]
+          
+          onsite = int(float(audio_file.split("_")[-1].split(".")[0]))
+          
+          audio = None
+          label = None
+          
+          if Path("CACHE_AUDIO/"+file_id+".wav").is_file() == True:
+               audio = torchaudio.load("CACHE_AUDIO/"+file_id+".wav")[0]
+               label = torch.load("CACHE_LABEL/"+file_id+".pt")
+               
+          else:
+               for i_chunk in range(onsite-int(config.chunk_size/2), onsite+int(config.chunk_size/2) + 1):
+                    audio_file_cur = audio_file.replace(str(onsite)+".wav", str(i_chunk) + ".wav")
+                    label_file_cur = label_file.replace(str(onsite)+".npy", str(i_chunk) + ".npy")
+                    if Path(audio_file_cur).is_file() == True: 
+                         audio_cur = torchaudio.load(audio_file_cur)[0]
+               
+                         label_cur = np.load(label_file_cur)
+                         label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
+                         
+                    else:
+                         audio_cur = torchaudio.load(audio_file)[0]
+                         
+                         label_cur = np.load(label_file)
+                         label_cur = torch.from_numpy(label_cur).type(torch.FloatTensor).unsqueeze(0).repeat(int(config.sample_rate/config.hop_size), 1)
+                         
+                    if audio == None:
+                         audio = audio_cur
+                         label = label_cur
+                    else:
+                         audio = torch.cat( (audio,audio_cur), dim=1)
+                         label = torch.cat( (label,label_cur), dim=0)
+                         
+               torchaudio.save("CACHE_AUDIO/"+file_id+".wav", audio, 16000)
+               torch.save(label, "CACHE_LABEL/"+file_id+".pt")
+          
+          if config.wavaugment and not self.test:
+               audio = self.wavaugment(audio)
+               if config.sample_rate*config.chunk_size <= audio.size(1):
+                    audio = audio[:,:config.sample_rate*config.chunk_size]
+               else:
+                    audio = torch.nn.functional.pad(audio, (0, config.sample_rate*config.chunk_size - audio.size(1),0,0))
+          else:
+               audio = audio 
+
+          feature_input = mel_spectrogram(audio)[0]
+          
+          feature_input_local = mel_spectrogram_local(audio[:,int(config.chunk_size/2)*config.sample_rate:(int(config.chunk_size/2)+1)*config.sample_rate])[0]
+          
+          if config.specaugment and not self.test:
+               feature_input = self.specaugment(feature_input)
+          # print(feature_input.shape)          
+          return (feature_input.T, feature_input_local.T) , label, audio_file
+     
      def get_wav(self, idx):
           audio_file = self.audios[idx]
           label_file = self.labels[idx]
@@ -174,6 +233,8 @@ class WavDataset(torch.utils.data.Dataset):
                return self.get_wav(idx)
           elif config.model == "CRNN_Chunk":
                return self.get_mel_chunk(idx)
+          elif config.model == "CRNN_GLA":
+               return self.get_mel_gla(idx)
      
      def get_class_idxs(self):
           class_idxs = {}

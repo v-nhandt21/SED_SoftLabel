@@ -33,6 +33,8 @@ def prediction(output_model):
           
           if config.model == "CRNN" or config.model == "CRNN_Chunk":
                model = CRNN()
+          elif config.model == "CRNN_GLA":
+               model = CRNN_GLA()
           else:
                model = Wav2VecClassifier()
 

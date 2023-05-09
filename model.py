@@ -170,3 +170,36 @@ class CRNN_Chunk(nn.Module):
           # x = torch.nn.functional.softmax(x, dim=1)
 
           return x, embedding
+     
+class CRNN_GLA(nn.Module):
+     def __init__(self, cnn_filters=128, rnn_hid=32, _dropout_rate=0.2):
+          super(CRNN_GLA, self).__init__()
+          self.global_CRNN = CRNN_Chunk()
+          self.local_CRNN = CRNN_Chunk()
+          
+          self.linear2 = nn.Linear(rnn_hid, config.n_classes)
+          
+          self.sigmoid = nn.Sigmoid()
+
+     def forward(self, input):
+          
+          global_input, local_input = input
+          
+          # print(global_input.shape)
+          # print(local_input.shape)
+
+          x1, embedding1 = self.global_CRNN(global_input)
+          x2, embedding2 = self.local_CRNN(local_input)
+          
+          # print("emb1: ", embedding1.shape)
+          # print("emb2: ", embedding2.shape)
+          
+          embedding = embedding1 + embedding2
+          
+          x = self.linear2(embedding)
+          
+          if config.use_sigmoid:
+               x = self.sigmoid(x)
+          # x = torch.nn.functional.softmax(x, dim=1)
+
+          return x, embedding

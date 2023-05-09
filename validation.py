@@ -43,9 +43,18 @@ def prediction():
                for datas, batch_target, files in tqdm.tqdm(test_loader):
                     prediction, embedding = model(datas)
                     
+                    if config.model == "CRNN_Chunk":
+                         frame_sec = int(config.sample_rate/config.hop_size)
+                         prediction = prediction[:,int(config.chunk_size/2)*frame_sec:(int(config.chunk_size/2)+1)*frame_sec,:]
+                         batch_target = batch_target[:,int(config.chunk_size/2)*frame_sec:(int(config.chunk_size/2)+1)*frame_sec,:]
+                         
+                         batch_target = batch_target[0]
+                         prediction = prediction.squeeze()
+                         
                     # Feed into the model
                     framewise_output = prediction.detach().cpu().numpy()
-
+                    
+                    
                     # Append to evaluate the whole test fold at once
                     if nbatch == 0:
                          fold_target = batch_target
@@ -55,10 +64,13 @@ def prediction():
                          fold_output = np.append(fold_output, framewise_output, axis=0)
                     
                     nbatch+=1
-                    
-               reference = process_event(config.labels_hard, fold_target.T, config.posterior_thresh, 1)
 
-               results = process_event(config.labels_hard, fold_output.T, config.posterior_thresh, 1)
+               print(fold_output.shape)
+               print(fold_target.shape)
+                    
+               reference = process_event(config.labels_hard, fold_target.T, config.posterior_thresh, config.hop_size / config.sample_rate)
+
+               results = process_event(config.labels_hard, fold_output.T, config.posterior_thresh, config.hop_size / config.sample_rate)
 
                # Save data for all the folds
                segment_based_metrics_all_folds.evaluate(
