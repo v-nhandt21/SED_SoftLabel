@@ -13,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
 from pytorch_balanced_sampler.sampler import SamplerFactory
 import shutil
+from loss import GlobalLocalLoss
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -38,7 +39,7 @@ def train():
      epoch_global = 0
 
      for fold in config.holdout_fold:
-          
+          # fold=5
           print("Fold: ", fold)
 
           # Load features and labels
@@ -75,7 +76,7 @@ def train():
                model = Wav2VecClassifier().to(device)
           elif config.model == "CRNN_Chunk":
                model = CRNN_Chunk().to(device)
-               summary(model, (200, 64))
+               summary(model, (config.chunk_size*int(config.sample_rate/config.hop_size), 64))
           elif config.model == "CRNN_GLA":
                model = CRNN_GLA().to(device)
 
@@ -83,8 +84,10 @@ def train():
           if LogWanDB:
                wandb.watch(model)
                
-          criterion = torch.nn.MSELoss(reduction='mean')
-               
+          if config.model != "CRNN_GLA":
+               criterion = torch.nn.MSELoss(reduction='mean')
+          else:
+               criterion = GlobalLocalLoss()
           print('\nCreate model:')
 
           # Optimizer
@@ -118,7 +121,7 @@ def train():
                     # print("====", batch_target.shape)
 
                     # Calculate loss
-                    loss = criterion(batch_output, batch_target.to(device))
+                    loss = criterion(batch_output, move_data_to_device(batch_target, device))
                          
                     tr_batch_loss.append(loss.item())
 
@@ -126,8 +129,8 @@ def train():
                     loss.backward()
                     optimizer.step()
                     
-                    if iter % config.log_iteration == 0:
-                         print(batch_output[0])
+                    # if iter % config.log_iteration == 0:
+                    #      print(batch_output[0])
                          # print(batch_target[0])
                          
 
@@ -143,20 +146,28 @@ def train():
                
                          batch_output, embedding = model(move_data_to_device(batch_data, device))
 
-                         loss = criterion(batch_output, batch_target.to(device))
+                         loss = criterion(batch_output, move_data_to_device(batch_target, device))
 
                          running_loss += loss
 
                     avg_vloss = running_loss /len(validate_loader)
                     
                     # Check if during the epochs the ER does not improve
-                    if avg_vloss < best_loss:
+                    if avg_vloss < best_loss and fold != 6:
                          best_model = model
                          best_epoch = epoch
                          best_loss = avg_vloss
                          pat_cnt = 0
                          pat_learn_rate = 0
 
+                         torch.save(best_model.state_dict(), f'{output_model}/best_fold{fold}.bin')
+                         
+                    if fold == 6:
+                         best_model = model
+                         best_epoch = epoch
+                         best_loss = avg_vloss
+                         pat_cnt = 0
+                         pat_learn_rate = 0
                          torch.save(best_model.state_dict(), f'{output_model}/best_fold{fold}.bin')
 
                pat_cnt += 1

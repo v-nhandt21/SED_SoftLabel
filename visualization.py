@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 
 def addlabels(plt, x,y):
      for i in range(len(x)):
-          plt.text(i, y[i], y[i], ha = 'center', color="red")
+          plt.text(i, y[i], y[i], ha = 'center', color="red", fontsize=18)
           
 def plot_dataset():
      gt = open("metadata/gt_dev.csv", "r", encoding="utf-8")
@@ -42,7 +42,7 @@ def plot_dataset():
      
      # plt.figure().set_figwidth(40)
      # plt.figure().set_figheight(10)
-     plt.rcParams['figure.figsize'] = [15, 12]
+     plt.rcParams['figure.figsize'] = [20, 18]
 
      labels = config.class_labels_hard.keys()
 
@@ -53,14 +53,13 @@ def plot_dataset():
      plt.bar(labels, minus, color="darkorange")
 
      y_pos = range(len(labels))
-     plt.xticks(y_pos, config.class_labels_hard, rotation=45, ha='right')
+     plt.xticks(y_pos, config.class_labels_hard, rotation=45, ha='right', fontsize=18)
 
      # legend
      handles = [plt.Rectangle((5,5),1,1, color="green"), plt.Rectangle((0,0),1,1, color="darkorange")]
      plt.legend(handles, ["soft_label", "hard_label"])
 
      plt.title("Label distribution for hard and soft label")
-
      plt.savefig("metadata/gt.png")
      # plt.show()
 
@@ -88,5 +87,5 @@ def plot_test():
      plt.savefig("Outdir/test.png")
      
 if __name__ == '__main__':
-     # plot_dataset()
-     plot_test()
+     plot_dataset()
+     # plot_test()

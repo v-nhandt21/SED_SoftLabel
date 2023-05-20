@@ -7,6 +7,7 @@ from utils import split_in_seqs, create_folder
 from wavdataset import WavDataset
 from model import *
 import glob
+import shutil
 
 def prediction(output_model):
      device = 'cuda' if (torch.cuda.is_available()) else 'cpu'
@@ -18,10 +19,23 @@ def prediction(output_model):
      
      Tensor_Projector = [0]*11
      
-     frame_sec = int(config.sample_rate/config.hop_size)
      
-     for fold in config.holdout_fold:
+     
+     for fold in [1,2,3,4,5]:
+          # if fold != 4:
+          #      config.model = "CRNN_Chunk"
+          #      config.chunk_size = 41
+          #      output_model="Outdir/20230426012918"
+          # else:
+          #      config.model = "CRNN_GLA"
+          #      config.chunk_size = 21
+          #      config.local_model = "W2V"
+          #      output_model="Outdir/20230512001623"
+               
           print("Fold: ", fold)
+          print(config.model)
+          
+          frame_sec = int(config.sample_rate/config.hop_size)
      
           # Load features and labels
           test_fold = "metadata/development_folds/fold" + str(fold) + "_test.csv"
@@ -32,7 +46,7 @@ def prediction(output_model):
           test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
           
           if config.model == "CRNN" or config.model == "CRNN_Chunk":
-               model = CRNN()
+               model = CRNN_Chunk()
           elif config.model == "CRNN_GLA":
                model = CRNN_GLA()
           else:
@@ -43,9 +57,16 @@ def prediction(output_model):
           model.eval()
           with torch.no_grad():
                for datas, target, files in tqdm.tqdm(test_loader):
+                    
                     prediction, embedding = model(datas)
                     
-                    prediction = prediction[:,int(config.chunk_size/2)*frame_sec:(int(config.chunk_size/2)+1)*frame_sec,:]
+                    if config.model != "CRNN_GLA":
+                         prediction = prediction[:,int(config.chunk_size/2)*frame_sec:(int(config.chunk_size/2)+1)*frame_sec,:]
+                    
+                    if config.model == "CRNN_GLA":
+                         prediction, local_prediction = prediction
+                         prediction = prediction[:,int(config.chunk_size/2)*frame_sec:(int(config.chunk_size/2)+1)*frame_sec,:]
+                         target, label_scene = target
                     
                     labels = torch.argmax(target[0], dim=1)
                     for idx, label in enumerate(labels):
@@ -94,9 +115,12 @@ if __name__ == '__main__':
      
      
      output_model = sorted(glob.glob('Outdir/*'))[-1]
+     print(output_model.split("/")[-1])
      
-     # output_model = '/home/nhandt23/Desktop/DCASE/Wav2Vec/Outdir/20230425222528'
-     # print(output_model)
+     output_model = "Outdir/20230508110052"
+     
+     # shutil.copy(output_model+"/config.py" , "config.py")
+     # import config
      
      # output_model = 'Outdir/20230420141731'
      prediction(output_model)
